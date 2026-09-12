@@ -1,0 +1,288 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Abhishek",
+      "passcode": "641203"
+    },
+    {
+      "id": 2,
+      "name": "Akhil",
+      "passcode": "728415"
+    },
+    {
+      "id": 3,
+      "name": "Ashish",
+      "passcode": "593826"
+    },
+    {
+      "id": 4,
+      "name": "Atharva",
+      "passcode": "816374"
+    },
+    {
+      "id": 5,
+      "name": "Chetan",
+      "passcode": "462981"
+    },
+    {
+      "id": 6,
+      "name": "Chinmay",
+      "passcode": "937154"
+    },
+    {
+      "id": 7,
+      "name": "Gargi",
+      "passcode": "285763"
+    },
+    {
+      "id": 8,
+      "name": "Gopal",
+      "passcode": "704628"
+    },
+    {
+      "id": 9,
+      "name": "Harshada",
+      "passcode": "359172"
+    },
+    {
+      "id": 10,
+      "name": "Hrishikesh",
+      "passcode": "681945"
+    },
+    {
+      "id": 11,
+      "name": "Kedar",
+      "passcode": "524837"
+    },
+    {
+      "id": 12,
+      "name": "Komal",
+      "passcode": "873260"
+    },
+    {
+      "id": 13,
+      "name": "Mayuresh",
+      "passcode": "416795"
+    },
+    {
+      "id": 14,
+      "name": "Nikita",
+      "passcode": "962508"
+    },
+    {
+      "id": 15,
+      "name": "Pankaj",
+      "passcode": "137684"
+    },
+    {
+      "id": 16,
+      "name": "Parth",
+      "passcode": "845219"
+    },
+    {
+      "id": 17,
+      "name": "Pooja",
+      "passcode": "278536"
+    },
+    {
+      "id": 18,
+      "name": "Pravin",
+      "passcode": "246810"
+    },
+    {
+      "id": 19,
+      "name": "Rahul",
+      "passcode": "753108"
+    },
+    {
+      "id": 20,
+      "name": "Rohan",
+      "passcode": "394861"
+    },
+    {
+      "id": 21,
+      "name": "Rohit",
+      "passcode": "826507"
+    },
+    {
+      "id": 22,
+      "name": "Roshan",
+      "passcode": "145932"
+    },
+    {
+      "id": 23,
+      "name": "Rutuja",
+      "passcode": "578246"
+    },
+    {
+      "id": 24,
+      "name": "Sachin",
+      "passcode": "903715"
+    },
+    {
+      "id": 25,
+      "name": "Shashank",
+      "passcode": "267849"
+    },
+    {
+      "id": 26,
+      "name": "Smita",
+      "passcode": "731596"
+    },
+    {
+      "id": 27,
+      "name": "Suyash",
+      "passcode": "458027"
+    },
+    {
+      "id": 28,
+      "name": "Vicky",
+      "passcode": "894163"
+    },
+    {
+      "id": 29,
+      "name": "Vikas",
+      "passcode": "326750"
+    },
+    {
+      "id": 30,
+      "name": "Vinayak",
+      "passcode": "670284"
+    },
+    {
+      "id": 31,
+      "name": "Yogesh",
+      "passcode": "512938"
+    }
+  ],
+  "desks": [
+    {
+      "id": "WS169",
+      "label": "WS169",
+      "block": "Work Station",
+      "deskId": 1
+    },
+    {
+      "id": "WS170",
+      "label": "WS170",
+      "block": "Work Station",
+      "deskId": 2
+    },
+    {
+      "id": "WS238",
+      "label": "WS238",
+      "block": "Work Station",
+      "deskId": 3
+    },
+    {
+      "id": "WS239",
+      "label": "WS239",
+      "block": "Work Station",
+      "deskId": 4
+    },
+    {
+      "id": "WS240",
+      "label": "WS240",
+      "block": "Work Station",
+      "deskId": 5
+    },
+    {
+      "id": "WS241",
+      "label": "WS241",
+      "block": "Work Station",
+      "deskId": 6
+    },
+    {
+      "id": "WS242",
+      "label": "WS242",
+      "block": "Work Station",
+      "deskId": 7
+    },
+    {
+      "id": "WS243",
+      "label": "WS243",
+      "block": "Work Station",
+      "deskId": 8
+    },
+    {
+      "id": "WS244",
+      "label": "WS244",
+      "block": "Work Station",
+      "deskId": 9
+    },
+    {
+      "id": "WS245",
+      "label": "WS245",
+      "block": "Work Station",
+      "deskId": 10
+    },
+    {
+      "id": "WS246",
+      "label": "WS246",
+      "block": "Work Station",
+      "deskId": 11
+    },
+    {
+      "id": "WS247",
+      "label": "WS247",
+      "block": "Work Station",
+      "deskId": 12
+    },
+    {
+      "id": "WS248",
+      "label": "WS248",
+      "block": "Work Station",
+      "deskId": 13
+    },
+    {
+      "id": "WS249",
+      "label": "WS249",
+      "block": "Work Station",
+      "deskId": 14
+    },
+    {
+      "id": "WS250",
+      "label": "WS250",
+      "block": "Work Station",
+      "deskId": 15
+    },
+    {
+      "id": "WS251",
+      "label": "WS251",
+      "block": "Work Station",
+      "deskId": 16
+    },
+    {
+      "id": "WS252",
+      "label": "WS252",
+      "block": "Work Station",
+      "deskId": 17
+    },
+    {
+      "id": "WS263",
+      "label": "WS263",
+      "block": "Work Station",
+      "deskId": 18
+    },
+    {
+      "id": "WS264",
+      "label": "WS264",
+      "block": "Work Station",
+      "deskId": 19
+    },
+    {
+      "id": "WS348",
+      "label": "WS348",
+      "block": "Work Station",
+      "deskId": 20
+    },
+    {
+      "id": "WS349",
+      "label": "WS349",
+      "block": "Work Station",
+      "deskId": 21
+    }
+  ],
+  "bookings": []
+}
