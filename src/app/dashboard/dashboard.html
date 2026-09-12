@@ -1,0 +1,111 @@
+<section class="dashboard-shell">
+	@if (isLoggedIn() && !hasDeskFilter()) {
+		<header class="dashboard-header">
+			<div>
+				<h1>Book My Desk</h1>				
+				<fieldset class="booking-day-selector">
+					<legend>Booking day</legend>
+					<label>
+						<input
+							type="radio"
+							name="bookingDay"
+							value="today"
+							[checked]="bookingDay() === 'today'"
+							[disabled]="now().getHours() >= 20"
+							(change)="selectBookingDay('today')"
+						/>
+						<strong>Today ({{ todayLabel() }})</strong>
+					</label>
+					<label>
+						<input
+							type="radio"
+							name="bookingDay"
+							value="tomorrow"
+							[checked]="bookingDay() === 'tomorrow'"
+							(change)="selectBookingDay('tomorrow')"
+						/>
+						<strong>Tomorrow ({{ tomorrowLabel() }})</strong>
+					</label>
+				</fieldset>
+			</div>
+
+			<div class="auth-box">
+				<p class="mode-chip editable">Logged in: {{ userName() }} ({{ authCode() }})</p>
+				<button type="button" (click)="logout()">Logout</button>
+			</div>
+		</header>
+  }
+
+	@if (isLoggedIn() && !hasDeskFilter()) {
+		<table class="status-table" aria-label="Desk status legend">
+			<thead>
+				<tr>
+					<th scope="col">Block</th>
+					<th scope="col">Status Icon</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr>
+					<td>Available</td>
+					<td>
+						<span class="status-dot available" aria-hidden="true"></span>
+						Green
+					</td>
+				</tr>
+				<tr>
+					<td>Booked</td>
+					<td>
+						<span class="status-dot booked" aria-hidden="true"></span>
+						Red
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	}
+
+	@if (actionMessage() && isLoggedIn()) {
+		<p class="action-message">{{ actionMessage() }}</p>
+	}
+
+	@if (!isReadOnly() && isLoading()) {
+		<p class="loading-text">Loading desk data...</p>
+	} @else if (!isReadOnly() && !selectedDeskFound()) {
+		<p class="action-message">Desk number not found. Use /dashboard/deskno=1 up to /dashboard/deskno=10.</p>
+	} @else {
+		<div class="blocks-grid" [class.single-desk-view]="hasDeskFilter()">
+			@for (block of deskBlocks(); track block.name) {
+				<section class="desk-block" [attr.aria-label]="block.name">
+					@if (!hasDeskFilter()) {
+						<h2>{{ block.name }}</h2>
+					}
+
+					<div class="desks-grid">
+						@for (desk of block.desks; track desk.id) {
+							<button
+								type="button"
+								class="desk-box"
+								[class.available]="desk.status === 'available'"
+								[class.booked]="desk.status === 'booked'"
+								[attr.aria-label]="deskAriaLabel(desk)"
+								[disabled]="!canSelectDesk(desk)"
+								(click)="onDeskSelect(desk)"
+							>
+								<span class="desk-title">{{ desk.label }}</span>
+								@if (desk.booking?.bookedByName) {
+									<span class="desk-user">User: {{ desk.booking?.bookedByName }}</span>
+								}
+								<span
+									class="status-dot"
+									[class.available]="desk.status === 'available'"
+									[class.booked]="desk.status === 'booked'"
+									aria-hidden="true"
+								></span>
+								<span class="desk-action">{{ deskActionLabel(desk) }}</span>
+							</button>
+						}
+					</div>
+				</section>
+			}
+		</div>
+	}
+</section>
