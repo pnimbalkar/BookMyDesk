@@ -17,6 +17,7 @@ export class DeskBookingService {
 
   private readonly bookingApiPath = '/api/bookings';
   private readonly bookingCleanupApiPath = '/api/bookings/cleanup';
+  private readonly localBookingsStorageKey = 'bookmydesk-bookings';
   private readonly dbSignal = signal<DeskDb>(dbJson);
   private readonly bookingsSignal = signal<DeskBooking[]>([]);
   private readonly loadedSignal = signal(false);
@@ -51,9 +52,8 @@ export class DeskBookingService {
     const selectedUser = this.dbSignal().users.find((user) => user.id === userId);
 
     const hasMatchingPasscode = selectedUser?.passcode === normalizedCode;
-    const hasAssignedDesk = this.dbSignal().desks.some((desk) => desk.deskId === userId);
 
-    if (!hasMatchingPasscode || !hasAssignedDesk || !selectedUser) {
+    if (!hasMatchingPasscode || !selectedUser) {
       return false;
     }
 
@@ -219,7 +219,7 @@ export class DeskBookingService {
       const response = await firstValueFrom(this.http.get<{ bookings: DeskBooking[] }>(this.bookingApiPath));
       this.bookingsSignal.set(this.sanitizeBookings(response.bookings));
     } catch {
-      this.bookingsSignal.set([]);
+      this.bookingsSignal.set(this.readLocalBookings());
     } finally {
       this.loadedSignal.set(true);
       this.loadPromise = null;
@@ -340,10 +340,37 @@ export class DeskBookingService {
 
     try {
       await firstValueFrom(this.http.put(this.bookingApiPath, { bookings }));
+      this.writeLocalBookings(bookings);
       return true;
     } catch {
-      this.bookingsSignal.set(rollbackState);
-      return false;
+      try {
+        this.writeLocalBookings(bookings);
+        return true;
+      } catch {
+        this.bookingsSignal.set(rollbackState);
+        return false;
+      }
     }
+  }
+
+  private readLocalBookings(): DeskBooking[] {
+    if (!isPlatformBrowser(this.platformId)) {
+      return [];
+    }
+
+    try {
+      const storedBookings = localStorage.getItem(this.localBookingsStorageKey);
+      return storedBookings ? this.sanitizeBookings(JSON.parse(storedBookings) as unknown) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeLocalBookings(bookings: DeskBooking[]): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    localStorage.setItem(this.localBookingsStorageKey, JSON.stringify(bookings));
   }
 }
