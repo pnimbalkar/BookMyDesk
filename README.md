@@ -47,12 +47,19 @@ ng test
 ## Deploying to Render
 
 This application includes an Express API for shared booking status. Create a Render
-Web Service from this repository and use:
+Web Service from this repository. The included `render.yaml` uses the service name
+`bookmydesk`, so the frontend expects the API at:
+
+`https://bookmydesk.onrender.com`
 
 - Build command: `npm ci && npm run build`
 - Start command: `npm run serve:ssr:bookmydesk`
 
-The included `render.yaml` can also be used with Render Blueprint deployment.
+The included `render.yaml` can also be used with Render Blueprint deployment. Verify
+the backend at `https://bookmydesk.onrender.com/health`, then redeploy the GitHub
+Pages frontend. Booking updates are shared while the Render service is running;
+the JSON file is not durable storage on Render's free plan and can reset after a
+service restart.
 
 ## Running end-to-end tests
 

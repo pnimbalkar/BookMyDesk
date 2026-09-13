@@ -15,11 +15,15 @@ export class DeskBookingService {
   private readonly authService = inject(AuthService);
   private readonly platformId = inject(PLATFORM_ID);
 
-  private readonly bookingApiPath = '/api/bookings';
-  private readonly bookingCleanupApiPath = '/api/bookings/cleanup';
+  private readonly apiBaseUrl = this.getApiBaseUrl();
+  private readonly bookingApiPath = this.apiUrl('/api/bookings');
+  private readonly bookingCleanupApiPath = this.apiUrl('/api/bookings/cleanup');
   private readonly localBookingsStorageKey = 'bookmydesk-bookings';
   private readonly localBookingEventsStorageKey = 'bookmydesk-booking-events';
-  private readonly dbSignal = signal<DeskDb>(dbJson);
+  private readonly dbSignal = signal<DeskDb>({
+    users: dbJson.users,
+    desks: dbJson.desks
+  });
   private readonly bookingsSignal = signal<DeskBooking[]>([]);
   private readonly bookingEventsSignal = signal<DeskBookingEvent[]>([]);
   private readonly loadedSignal = signal(false);
@@ -27,6 +31,20 @@ export class DeskBookingService {
   private loadPromise: Promise<void> | null = null;
 
   readonly dbLoaded = this.loadedSignal.asReadonly();
+
+  private getApiBaseUrl(): string {
+    if (!isPlatformBrowser(this.platformId)) {
+      return '';
+    }
+
+    return window.location.hostname.endsWith('github.io')
+      ? 'https://bookmydesk.onrender.com'
+      : '';
+  }
+
+  private apiUrl(path: string): string {
+    return `${this.apiBaseUrl}${path}`;
+  }
 
   constructor() {
     this.purgeExpiredBookings(new Date());
@@ -217,10 +235,13 @@ export class DeskBookingService {
     }
 
     try {
-      const db = await firstValueFrom(this.http.get<DeskDb>('/db.json'));
+      const db = await firstValueFrom(this.http.get<DeskDb>(this.apiUrl('/db.json')));
       this.dbSignal.set(db);
     } catch {
-      this.dbSignal.set(dbJson);
+      this.dbSignal.set({
+        users: dbJson.users,
+        desks: dbJson.desks
+      });
     }
 
     try {

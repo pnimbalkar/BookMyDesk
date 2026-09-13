@@ -138,7 +138,7 @@
     {
       "id": 28,
       "name": "Vicky",
-      "passcode": "894163"
+      "passcode": "246810"
     },
     {
       "id": 29,
@@ -284,6 +284,36 @@
       "deskId": 21
     }
   ],
-  "bookings": [],
-  "bookingEvents": []
+  "bookings": [
+    {
+      "deskId": "WS250",
+      "reservedFor": "2026-09-13",
+      "bookedBy": "book@28",
+      "bookedAt": "2026-09-13T13:21:15.065Z"
+    },
+    {
+      "deskId": "WS169",
+      "reservedFor": "2026-09-13",
+      "bookedBy": "book@18",
+      "bookedAt": "2026-09-13T13:22:48.225Z"
+    }
+  ],
+  "bookingEvents": [
+    {
+      "deskId": "WS250",
+      "reservedFor": "2026-09-13",
+      "bookedBy": "book@28",
+      "bookedAt": "2026-09-13T13:21:15.065Z",
+      "action": "saved",
+      "actionAt": "2026-09-13T13:21:15.065Z"
+    },
+    {
+      "deskId": "WS169",
+      "reservedFor": "2026-09-13",
+      "bookedBy": "book@18",
+      "bookedAt": "2026-09-13T13:22:48.225Z",
+      "action": "saved",
+      "actionAt": "2026-09-13T13:22:48.225Z"
+    }
+  ]
 }

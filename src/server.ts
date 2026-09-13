@@ -34,8 +34,34 @@ interface DeskDbFile {
 let bookingWriteQueue = Promise.resolve();
 
 const app = express();
+const allowedOrigins = new Set([
+  'http://localhost:4200',
+  'http://localhost:4000',
+  'https://pnimbalkar.github.io',
+]);
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (allowedOrigins.has(origin) || process.env['CORS_ORIGIN'] === origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(204).end();
+    return;
+  }
+
+  next();
+});
 app.use(express.json());
 const angularApp = new AngularNodeAppEngine();
+
+app.get('/health', (_req, res) => {
+  res.status(200).json({ ok: true, service: 'bookmydesk' });
+});
 
 function isDeskBookingRecord(value: unknown): value is DeskBookingRecord {
   if (typeof value !== 'object' || value === null) {
