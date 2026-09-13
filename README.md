@@ -44,6 +44,16 @@ To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use th
 ng test
 ```
 
+## Deploying to Render
+
+This application includes an Express API for shared booking status. Create a Render
+Web Service from this repository and use:
+
+- Build command: `npm ci && npm run build`
+- Start command: `npm run serve:ssr:bookmydesk`
+
+The included `render.yaml` can also be used with Render Blueprint deployment.
+
 ## Running end-to-end tests
 
 For end-to-end (e2e) testing, run:
