@@ -14,6 +14,8 @@ export interface DeskUser {
 export interface DeskDb {
   users: DeskUser[];
   desks: DeskDefinition[];
+  bookings?: DeskBooking[];
+  bookingEvents?: DeskBookingEvent[];
 }
 
 export interface DeskBooking {
@@ -22,6 +24,11 @@ export interface DeskBooking {
   bookedBy: string;
   bookedByName?: string;
   bookedAt: string;
+}
+
+export interface DeskBookingEvent extends DeskBooking {
+  action: 'saved' | 'canceled';
+  actionAt: string;
 }
 
 export interface DeskView extends DeskDefinition {

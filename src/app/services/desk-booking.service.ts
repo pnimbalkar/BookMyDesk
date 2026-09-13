@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { isPlatformBrowser } from '@angular/common';
 import { AuthService } from './auth.service';
-import { DeskBooking, DeskDb, DeskUser, DeskView } from '../models/desk.models';
+import { DeskBooking, DeskBookingEvent, DeskDb, DeskUser, DeskView } from '../models/desk.models';
 import dbJson from '../../../public/db.json';
 
 export type BookingDay = 'today' | 'tomorrow';
@@ -18,8 +18,10 @@ export class DeskBookingService {
   private readonly bookingApiPath = '/api/bookings';
   private readonly bookingCleanupApiPath = '/api/bookings/cleanup';
   private readonly localBookingsStorageKey = 'bookmydesk-bookings';
+  private readonly localBookingEventsStorageKey = 'bookmydesk-booking-events';
   private readonly dbSignal = signal<DeskDb>(dbJson);
   private readonly bookingsSignal = signal<DeskBooking[]>([]);
+  private readonly bookingEventsSignal = signal<DeskBookingEvent[]>([]);
   private readonly loadedSignal = signal(false);
 
   private loadPromise: Promise<void> | null = null;
@@ -145,7 +147,13 @@ export class DeskBookingService {
     bookedAt: now.toISOString()
   };
 
-  const saved = await this.setBookings([...existingBookings, booking], existingBookings);
+  const bookingEvent: DeskBookingEvent = {
+    ...booking,
+    action: 'saved',
+    actionAt: now.toISOString()
+  };
+  const nextEvents = [...this.bookingEventsSignal(), bookingEvent];
+  const saved = await this.setBookings([...existingBookings, booking], existingBookings, nextEvents);
   if (!saved) {
     return { ok: false, message: 'Booking could not be saved. Please try again.' };
   }
@@ -187,7 +195,13 @@ export class DeskBookingService {
     (entry) => !(entry.deskId === deskId && entry.reservedFor === reservedFor)
   );
 
-  const saved = await this.setBookings(remaining, this.bookingsSignal());
+  const bookingEvent: DeskBookingEvent = {
+    ...booking,
+    action: 'canceled',
+    actionAt: now.toISOString()
+  };
+  const nextEvents = [...this.bookingEventsSignal(), bookingEvent];
+  const saved = await this.setBookings(remaining, this.bookingsSignal(), nextEvents);
   if (!saved) {
     return { ok: false, message: 'Cancel could not be saved. Please try again.' };
   }
@@ -216,10 +230,15 @@ export class DeskBookingService {
     }
 
     try {
-      const response = await firstValueFrom(this.http.get<{ bookings: DeskBooking[] }>(this.bookingApiPath));
+      const response = await firstValueFrom(this.http.get<{
+        bookings: DeskBooking[];
+        bookingEvents?: DeskBookingEvent[];
+      }>(this.bookingApiPath));
       this.bookingsSignal.set(this.sanitizeBookings(response.bookings));
+      this.bookingEventsSignal.set(this.sanitizeBookingEvents(response.bookingEvents));
     } catch {
       this.bookingsSignal.set(this.readLocalBookings());
+      this.bookingEventsSignal.set(this.readLocalBookingEvents());
     } finally {
       this.loadedSignal.set(true);
       this.loadPromise = null;
@@ -276,7 +295,7 @@ export class DeskBookingService {
     });
 
     if (activeBookings.length !== bookings.length) {
-      void this.setBookings(activeBookings, bookings);
+      void this.setBookings(activeBookings, bookings, this.bookingEventsSignal());
     }
   }
 
@@ -331,23 +350,32 @@ export class DeskBookingService {
     return this.dbSignal().users.find((user) => user.id === Number(match[1]))?.name;
   }
 
-  private async setBookings(bookings: DeskBooking[], rollbackState: DeskBooking[]): Promise<boolean> {
+  private async setBookings(
+    bookings: DeskBooking[],
+    rollbackState: DeskBooking[],
+    bookingEvents: DeskBookingEvent[] = this.bookingEventsSignal(),
+    rollbackEvents: DeskBookingEvent[] = this.bookingEventsSignal()
+  ): Promise<boolean> {
     this.bookingsSignal.set(bookings);
+    this.bookingEventsSignal.set(bookingEvents);
 
     if (!isPlatformBrowser(this.platformId)) {
       return true;
     }
 
     try {
-      await firstValueFrom(this.http.put(this.bookingApiPath, { bookings }));
+      await firstValueFrom(this.http.put(this.bookingApiPath, { bookings, bookingEvents }));
       this.writeLocalBookings(bookings);
+      this.writeLocalBookingEvents(bookingEvents);
       return true;
     } catch {
       try {
         this.writeLocalBookings(bookings);
+        this.writeLocalBookingEvents(bookingEvents);
         return true;
       } catch {
         this.bookingsSignal.set(rollbackState);
+        this.bookingEventsSignal.set(rollbackEvents);
         return false;
       }
     }
@@ -372,5 +400,59 @@ export class DeskBookingService {
     }
 
     localStorage.setItem(this.localBookingsStorageKey, JSON.stringify(bookings));
+  }
+
+  private sanitizeBookingEvents(value: unknown): DeskBookingEvent[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter((item): item is DeskBookingEvent => {
+      if (!this.isDeskBooking(item)) {
+        return false;
+      }
+
+      const candidate = item as Partial<DeskBookingEvent>;
+      return (
+        (candidate.action === 'saved' || candidate.action === 'canceled') &&
+        typeof candidate.actionAt === 'string'
+      );
+    });
+  }
+
+  private isDeskBooking(value: unknown): value is DeskBooking {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+
+    const candidate = value as Partial<DeskBooking>;
+    return (
+      typeof candidate.deskId === 'string' &&
+      typeof candidate.reservedFor === 'string' &&
+      typeof candidate.bookedBy === 'string' &&
+      (candidate.bookedByName === undefined || typeof candidate.bookedByName === 'string') &&
+      typeof candidate.bookedAt === 'string'
+    );
+  }
+
+  private readLocalBookingEvents(): DeskBookingEvent[] {
+    if (!isPlatformBrowser(this.platformId)) {
+      return [];
+    }
+
+    try {
+      const storedEvents = localStorage.getItem(this.localBookingEventsStorageKey);
+      return storedEvents ? this.sanitizeBookingEvents(JSON.parse(storedEvents) as unknown) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeLocalBookingEvents(events: DeskBookingEvent[]): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    localStorage.setItem(this.localBookingEventsStorageKey, JSON.stringify(events));
   }
 }

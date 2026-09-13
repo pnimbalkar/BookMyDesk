@@ -19,10 +19,16 @@ interface DeskBookingRecord {
   bookedAt: string;
 }
 
+interface DeskBookingEvent extends DeskBookingRecord {
+  action: 'saved' | 'canceled';
+  actionAt: string;
+}
+
 interface DeskDbFile {
   users: unknown[];
   desks: unknown[];
   bookings: DeskBookingRecord[];
+  bookingEvents: DeskBookingEvent[];
 }
 
 let bookingWriteQueue = Promise.resolve();
@@ -51,6 +57,7 @@ function normalizeDb(value: unknown): DeskDbFile {
       users: [],
       desks: [],
       bookings: [],
+      bookingEvents: [],
     };
   }
 
@@ -62,7 +69,22 @@ function normalizeDb(value: unknown): DeskDbFile {
     bookings: Array.isArray(candidate.bookings)
       ? candidate.bookings.filter(isDeskBookingRecord)
       : [],
+    bookingEvents: Array.isArray(candidate.bookingEvents)
+      ? candidate.bookingEvents.filter(isDeskBookingEvent)
+      : [],
   };
+}
+
+function isDeskBookingEvent(value: unknown): value is DeskBookingEvent {
+  if (!isDeskBookingRecord(value)) {
+    return false;
+  }
+
+  const candidate = value as Partial<DeskBookingEvent>;
+  return (
+    (candidate.action === 'saved' || candidate.action === 'canceled') &&
+    typeof candidate.actionAt === 'string'
+  );
 }
 
 function parseDateKey(value: string): Date | null {
@@ -134,6 +156,7 @@ async function readDbFile(): Promise<{ path: string; db: DeskDbFile }> {
           users: [],
           desks: [],
           bookings: [],
+          bookingEvents: [],
         },
       };
     }
@@ -142,7 +165,10 @@ async function readDbFile(): Promise<{ path: string; db: DeskDbFile }> {
   }
 }
 
-async function writeBookings(bookings: DeskBookingRecord[]): Promise<void> {
+async function writeBookings(
+  bookings: DeskBookingRecord[],
+  bookingEvents?: DeskBookingEvent[],
+): Promise<void> {
   bookingWriteQueue = bookingWriteQueue
     .catch(() => {
       // Keep the queue alive even if a previous write failed.
@@ -152,6 +178,7 @@ async function writeBookings(bookings: DeskBookingRecord[]): Promise<void> {
     const nextDb: DeskDbFile = {
       ...db,
       bookings,
+      bookingEvents: bookingEvents ?? db.bookingEvents,
     };
 
     await fs.writeFile(path, JSON.stringify(nextDb, null, 2), 'utf-8');
@@ -163,16 +190,21 @@ async function writeBookings(bookings: DeskBookingRecord[]): Promise<void> {
 app.get('/api/bookings', async (_req, res) => {
   try {
     const { db } = await readDbFile();
-    res.status(200).json({ bookings: db.bookings });
+    res.status(200).json({ bookings: db.bookings, bookingEvents: db.bookingEvents });
   } catch {
     res.status(500).json({ message: 'Unable to read bookings.' });
   }
 });
 
 app.put('/api/bookings', async (req, res) => {
-  const payload = req.body as { bookings?: unknown };
+  const payload = req.body as { bookings?: unknown; bookingEvents?: unknown };
 
-  if (!Array.isArray(payload.bookings) || !payload.bookings.every(isDeskBookingRecord)) {
+  if (
+    !Array.isArray(payload.bookings) ||
+    !payload.bookings.every(isDeskBookingRecord) ||
+    (payload.bookingEvents !== undefined &&
+      (!Array.isArray(payload.bookingEvents) || !payload.bookingEvents.every(isDeskBookingEvent)))
+  ) {
     res.status(400).json({ message: 'Invalid bookings payload.' });
     return;
   }
@@ -183,9 +215,20 @@ app.put('/api/bookings', async (req, res) => {
     bookedBy: booking.bookedBy,
     bookedAt: booking.bookedAt,
   }));
+  const sanitizedBookingEvents = (payload.bookingEvents ?? []).map((event) => ({
+    deskId: event.deskId,
+    reservedFor: event.reservedFor,
+    bookedBy: event.bookedBy,
+    bookedAt: event.bookedAt,
+    action: event.action,
+    actionAt: event.actionAt,
+  }));
 
   try {
-    await writeBookings(sanitizedBookings);
+    await writeBookings(
+      sanitizedBookings,
+      payload.bookingEvents === undefined ? undefined : sanitizedBookingEvents,
+    );
     res.status(200).json({ message: 'Bookings saved.', count: sanitizedBookings.length });
   } catch {
     res.status(500).json({ message: 'Unable to save bookings.' });

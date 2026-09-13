@@ -284,5 +284,6 @@
       "deskId": 21
     }
   ],
-  "bookings": []
+  "bookings": [],
+  "bookingEvents": []
 }
