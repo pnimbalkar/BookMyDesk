@@ -77,6 +77,14 @@ export class DeskBookingService {
     return this.loadPromise;
   }
 
+  async refreshBookings(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    await this.loadBookings();
+  }
+
   getDeskViews(now: Date, bookingDay: BookingDay): DeskView[] {
     const targetDate = this.toDateKey(this.getBookingDate(now, bookingDay));
     const currentUserId = this.authService.authUserId();

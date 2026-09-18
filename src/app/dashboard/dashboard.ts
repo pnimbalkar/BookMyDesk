@@ -22,6 +22,7 @@ import { DeskView } from '../models/desk.models';
 })
 export class Dashboard {
   private readonly actionMessageDurationMs = 5000;
+  private readonly bookingRefreshIntervalMs = 5000;
   readonly bookingService = inject(DeskBookingService);
   private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
@@ -30,6 +31,7 @@ export class Dashboard {
   private readonly platformId = inject(PLATFORM_ID);
   private actionMessageTimerId: number | null = null;
   private actionMessageVersion = 0;
+  private bookingRefreshTimerId: number | null = null;
 
   readonly now = signal(new Date());
   readonly bookingDay = signal<BookingDay>(new Date().getHours() >= 20 ? 'tomorrow' : 'today');
@@ -98,6 +100,7 @@ export class Dashboard {
   constructor() {
     this.destroyRef.onDestroy(() => {
       this.clearActionMessageTimer();
+      this.clearBookingRefreshTimer();
     });
 
     this.startClock();
@@ -201,6 +204,24 @@ export class Dashboard {
     await this.bookingService.ensureDbLoaded();
     this.now.set(new Date());
     this.isLoading.set(false);
+    this.startBookingRefresh();
+  }
+
+  private startBookingRefresh(): void {
+    if (!isPlatformBrowser(this.platformId) || this.bookingRefreshTimerId !== null) {
+      return;
+    }
+
+    this.bookingRefreshTimerId = window.setInterval(() => {
+      void this.bookingService.refreshBookings();
+    }, this.bookingRefreshIntervalMs);
+  }
+
+  private clearBookingRefreshTimer(): void {
+    if (this.bookingRefreshTimerId !== null && isPlatformBrowser(this.platformId)) {
+      window.clearInterval(this.bookingRefreshTimerId);
+      this.bookingRefreshTimerId = null;
+    }
   }
 
   private startClock(): void {
