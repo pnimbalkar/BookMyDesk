@@ -35,7 +35,9 @@ jobs:
         run: npm run build -- --base-href /BookMyDesk/
 
       - name: Prepare SPA fallback
-        run: cp dist/bookmydesk/browser/index.html dist/bookmydesk/browser/404.html
+        run: |
+          cp dist/bookmydesk/browser/index.csr.html dist/bookmydesk/browser/index.html
+          cp dist/bookmydesk/browser/index.html dist/bookmydesk/browser/404.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
