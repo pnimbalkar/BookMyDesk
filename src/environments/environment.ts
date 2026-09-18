@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://bookmydesk.onrender.com/api'
+  apiUrl: 'https://bookmydesk.bsite.net/api'
 };
