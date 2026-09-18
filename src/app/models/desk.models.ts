@@ -5,30 +5,13 @@ export interface DeskDefinition {
   deskId: number;
 }
 
-export interface DeskUser {
-  id: number;
-  name: string;
-  passcode: string;
-}
-
-export interface DeskDb {
-  users: DeskUser[];
-  desks: DeskDefinition[];
-  bookings?: DeskBooking[];
-  bookingEvents?: DeskBookingEvent[];
-}
-
 export interface DeskBooking {
+  bookingDetailId: number;
+  userId: number;
   deskId: string;
   reservedFor: string;
   bookedBy: string;
   bookedByName?: string;
-  bookedAt: string;
-}
-
-export interface DeskBookingEvent extends DeskBooking {
-  action: 'saved' | 'canceled';
-  actionAt: string;
 }
 
 export interface DeskView extends DeskDefinition {

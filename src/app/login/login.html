@@ -6,25 +6,26 @@
       <p class="helper-text">Loading access details...</p>
     } @else {
       <form [formGroup]="loginForm" (ngSubmit)="submit()" novalidate>
-        <label for="userId">Usercode</label>
-        <select id="userId" formControlName="userId">
+        <label for="userId">User name</label>
+        <select id="userId" formControlName="userId" autocomplete="username">
           <option [ngValue]="0">Select user</option>
-          @for (user of users; track user.id) {
-            <option [ngValue]="user.id">{{ user.name }}</option>
+          @for (user of users(); track user.userId) {
+            <option [ngValue]="user.userId">{{ user.name }}</option>
           }
         </select>
 
         <label for="passcode">Passcode</label>
         <input
           id="passcode"
-          type="password"
+          type="number"
           formControlName="passcode"
+          inputmode="numeric"
           autocomplete="one-time-code"
           placeholder="Enter passcode"
         />
 
         @if (showValidationError()) {
-          <p class="error-text">Select a user and enter a six-digit numeric passcode.</p>
+          <p class="error-text">Select a user and enter a numeric passcode.</p>
         }
 
         <button type="submit">Login</button>

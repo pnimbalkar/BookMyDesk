@@ -22,8 +22,7 @@ import { DeskView } from '../models/desk.models';
 })
 export class Dashboard {
   private readonly actionMessageDurationMs = 5000;
-  private readonly actionMessageStorageKey = 'dashboard-action-message';
-  private readonly bookingService = inject(DeskBookingService);
+  readonly bookingService = inject(DeskBookingService);
   private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -101,7 +100,6 @@ export class Dashboard {
       this.clearActionMessageTimer();
     });
 
-    this.restoreActionMessage();
     this.startClock();
     void this.initialize();
   }
@@ -225,35 +223,24 @@ export class Dashboard {
     this.clearActionMessageTimer();
     this.actionMessage.set(message);
 
-    if (!isPlatformBrowser(this.platformId)) {
-      return;
-    }
-
     if (!message) {
-      window.sessionStorage.removeItem(this.actionMessageStorageKey);
       return;
     }
 
     if (clearAfterMs === null || clearAfterMs <= 0 || !message) {
-      window.sessionStorage.removeItem(this.actionMessageStorageKey);
       return;
     }
 
-    const expiresAt = Date.now() + clearAfterMs;
-    window.sessionStorage.setItem(
-      this.actionMessageStorageKey,
-      JSON.stringify({ message, expiresAt })
-    );
-
-    this.actionMessageTimerId = window.setTimeout(() => {
+    if (isPlatformBrowser(this.platformId)) {
+      this.actionMessageTimerId = window.setTimeout(() => {
       if (this.actionMessageVersion !== currentMessageVersion) {
         return;
       }
 
       this.actionMessage.set('');
-      window.sessionStorage.removeItem(this.actionMessageStorageKey);
       this.actionMessageTimerId = null;
-    }, clearAfterMs);
+      }, clearAfterMs);
+    }
   }
 
   private clearActionMessageTimer(): void {
@@ -263,52 +250,6 @@ export class Dashboard {
 
     window.clearTimeout(this.actionMessageTimerId);
     this.actionMessageTimerId = null;
-  }
-
-  private restoreActionMessage(): void {
-    if (!isPlatformBrowser(this.platformId)) {
-      return;
-    }
-
-    const rawValue = window.sessionStorage.getItem(this.actionMessageStorageKey);
-    if (!rawValue) {
-      return;
-    }
-
-    try {
-      const parsedValue: unknown = JSON.parse(rawValue);
-      if (typeof parsedValue !== 'object' || parsedValue === null) {
-        window.sessionStorage.removeItem(this.actionMessageStorageKey);
-        return;
-      }
-
-      const message =
-        'message' in parsedValue && typeof parsedValue.message === 'string' ? parsedValue.message : '';
-      const expiresAt =
-        'expiresAt' in parsedValue && typeof parsedValue.expiresAt === 'number' ? parsedValue.expiresAt : 0;
-      const remainingMs = expiresAt - Date.now();
-
-      if (!message || remainingMs <= 0) {
-        window.sessionStorage.removeItem(this.actionMessageStorageKey);
-        return;
-      }
-
-      this.actionMessageVersion += 1;
-      const currentMessageVersion = this.actionMessageVersion;
-      this.actionMessage.set(message);
-      this.actionMessageTimerId = window.setTimeout(() => {
-        if (this.actionMessageVersion !== currentMessageVersion) {
-          return;
-        }
-
-        this.actionMessage.set('');
-        window.sessionStorage.removeItem(this.actionMessageStorageKey);
-        this.actionMessageTimerId = null;
-      }, remainingMs);
-    } catch (error) {
-      console.error('Failed to restore dashboard action message from sessionStorage.', error);
-      window.sessionStorage.removeItem(this.actionMessageStorageKey);
-    }
   }
 
   private extractDeskNumber(value: string | null): number | null {

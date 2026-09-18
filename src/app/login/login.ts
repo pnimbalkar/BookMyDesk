@@ -23,9 +23,9 @@ export class Login {
 
   readonly loginForm = this.formBuilder.nonNullable.group({
     userId: [0, [Validators.required, Validators.min(1)]],
-    passcode: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]]
+    passcode: [0, [Validators.required]]
   });
-  readonly users = this.bookingService.getUsers();
+  readonly users = this.bookingService.users;
 
   readonly showValidationError = computed(() => {
     return this.formSubmitted() && (
@@ -47,12 +47,22 @@ export class Login {
 
     await this.bookingService.ensureDbLoaded();
 
-    const userId = this.loginForm.controls.userId.value;
-    const passcode = this.loginForm.controls.passcode.value.trim();
-    const isSuccess = this.bookingService.loginWithPasscode(userId, passcode);
+    try {
+      const selectedUser = this.users().find(
+        (user) => user.userId === this.loginForm.controls.userId.value
+      );
 
-    if (!isSuccess) {
-      this.errorMessage.set('Usercode and passcode do not match. Please try again.');
+      if (!selectedUser) {
+        this.errorMessage.set('Select a user and enter a passcode.');
+        return;
+      }
+
+      await this.bookingService.login({
+        name: selectedUser.name,
+        passcode: this.loginForm.controls.passcode.value
+      });
+    } catch {
+      this.errorMessage.set('User name and passcode do not match. Please try again.');
       return;
     }
 

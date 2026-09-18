@@ -284,20 +284,7 @@
       "deskId": 21
     }
   ],
-  "bookings": [
-    {
-      "deskId": "WS250",
-      "reservedFor": "2026-09-13",
-      "bookedBy": "book@28",
-      "bookedAt": "2026-09-13T13:21:15.065Z"
-    },
-    {
-      "deskId": "WS169",
-      "reservedFor": "2026-09-13",
-      "bookedBy": "book@18",
-      "bookedAt": "2026-09-13T13:22:48.225Z"
-    }
-  ],
+  "bookings": [],
   "bookingEvents": [
     {
       "deskId": "WS250",

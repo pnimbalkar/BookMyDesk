@@ -1,8 +1,7 @@
 <section class="dashboard-shell">
 	@if (isLoggedIn() && !hasDeskFilter()) {
 		<header class="dashboard-header">
-			<div>
-				<h1>Book My Desk</h1>				
+			<div class="booking-controls">
 				<fieldset class="booking-day-selector">
 					<legend>Booking day</legend>
 					<label>
@@ -33,35 +32,33 @@
 				<p class="mode-chip editable">Logged in: {{ userName() }} ({{ authCode() }})</p>
 				<button type="button" (click)="logout()">Logout</button>
 			</div>
+
+			<table class="status-table" aria-label="Desk status legend">
+				<thead>
+					<tr>
+						<th scope="col">Block</th>
+						<th scope="col">Status Icon</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Available</td>
+						<td>
+							<span class="status-dot available" aria-hidden="true"></span>
+							Green
+						</td>
+					</tr>
+					<tr>
+						<td>Booked</td>
+						<td>
+							<span class="status-dot booked" aria-hidden="true"></span>
+							Red
+						</td>
+					</tr>
+				</tbody>
+			</table>
 		</header>
   }
-
-	@if (isLoggedIn() && !hasDeskFilter()) {
-		<table class="status-table" aria-label="Desk status legend">
-			<thead>
-				<tr>
-					<th scope="col">Block</th>
-					<th scope="col">Status Icon</th>
-				</tr>
-			</thead>
-			<tbody>
-				<tr>
-					<td>Available</td>
-					<td>
-						<span class="status-dot available" aria-hidden="true"></span>
-						Green
-					</td>
-				</tr>
-				<tr>
-					<td>Booked</td>
-					<td>
-						<span class="status-dot booked" aria-hidden="true"></span>
-						Red
-					</td>
-				</tr>
-			</tbody>
-		</table>
-	}
 
 	@if (actionMessage() && isLoggedIn()) {
 		<p class="action-message">{{ actionMessage() }}</p>
@@ -69,6 +66,8 @@
 
 	@if (!isReadOnly() && isLoading()) {
 		<p class="loading-text">Loading desk data...</p>
+	} @else if (bookingService.loadError()) {
+		<p class="action-message">{{ bookingService.loadError() }}</p>
 	} @else if (!isReadOnly() && !selectedDeskFound()) {
 		<p class="action-message">Desk number not found. Use /dashboard/deskno=1 up to /dashboard/deskno=10.</p>
 	} @else {
@@ -93,6 +92,8 @@
 								<span class="desk-title">{{ desk.label }}</span>
 								@if (desk.booking?.bookedByName) {
 									<span class="desk-user">User: {{ desk.booking?.bookedByName }}</span>
+								} @else {
+									<span class="desk-user">Available</span>
 								}
 								<span
 									class="status-dot"

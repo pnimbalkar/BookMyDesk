@@ -1,57 +1,68 @@
-import { inject, Injectable, PLATFORM_ID, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { isPlatformBrowser } from '@angular/common';
+import { inject, Injectable, PLATFORM_ID, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
-import { DeskBooking, DeskBookingEvent, DeskDb, DeskUser, DeskView } from '../models/desk.models';
-import dbJson from '../../../public/db.json';
+import { DeskBooking, DeskDefinition, DeskView } from '../models/desk.models';
+import { environment } from '../../environments/environment';
 
 export type BookingDay = 'today' | 'tomorrow';
 
-@Injectable({ providedIn: 'root' })
+interface AuthResponse {
+  token: string;
+  userId: number;
+  name: string;
+  email: string;
+}
 
+interface BookingResponse {
+  bookingDetailId: number;
+  userId: number;
+  userName: string;
+  workStationCode: string;
+  bookingDate: string;
+}
+
+interface Credentials {
+  name: string;
+  passcode: number;
+}
+
+export interface LoginUser {
+  userId: number;
+  name: string;
+  email: string;
+}
+
+const DESKS: DeskDefinition[] = [
+  'W/S - 169', 'W/S - 170', 'W/S - 238', 'W/S - 239', 'W/S - 240', 'W/S - 241', 'W/S - 242',
+  'W/S - 243', 'W/S - 244', 'W/S - 245', 'W/S - 246', 'W/S - 247', 'W/S - 248', 'W/S - 249',
+  'W/S - 250', 'W/S - 251', 'W/S - 252', 'W/S - 263', 'W/S - 264', 'W/S - 348', 'W/S - 349'
+].map((code, index) => ({
+  id: code,
+  label: code,
+  block: 'Work Station',
+  deskId: index + 1
+}));
+
+@Injectable({ providedIn: 'root' })
 export class DeskBookingService {
   private readonly http = inject(HttpClient);
   private readonly authService = inject(AuthService);
   private readonly platformId = inject(PLATFORM_ID);
-
-  private readonly apiBaseUrl = this.getApiBaseUrl();
-  private readonly bookingApiPath = this.apiUrl('/api/bookings');
-  private readonly bookingCleanupApiPath = this.apiUrl('/api/bookings/cleanup');
-  private readonly localBookingsStorageKey = 'bookmydesk-bookings';
-  private readonly localBookingEventsStorageKey = 'bookmydesk-booking-events';
-  private readonly dbSignal = signal<DeskDb>({
-    users: dbJson.users,
-    desks: dbJson.desks
-  });
+  private readonly apiBaseUrl = environment.apiUrl;
   private readonly bookingsSignal = signal<DeskBooking[]>([]);
-  private readonly bookingEventsSignal = signal<DeskBookingEvent[]>([]);
+  private readonly usersSignal = signal<LoginUser[]>([]);
   private readonly loadedSignal = signal(false);
-
+  private readonly loadErrorSignal = signal<string | null>(null);
   private loadPromise: Promise<void> | null = null;
 
   readonly dbLoaded = this.loadedSignal.asReadonly();
-
-  private getApiBaseUrl(): string {
-    if (!isPlatformBrowser(this.platformId)) {
-      return '';
-    }
-
-    return window.location.hostname.endsWith('github.io')
-      ? 'https://bookmydesk.onrender.com'
-      : '';
-  }
-
-  private apiUrl(path: string): string {
-    return `${this.apiBaseUrl}${path}`;
-  }
-
-  constructor() {
-    this.purgeExpiredBookings(new Date());
-  }
+  readonly loadError = this.loadErrorSignal.asReadonly();
+  readonly users = this.usersSignal.asReadonly();
 
   async ensureDbLoaded(): Promise<void> {
-    if (this.loadedSignal()) {
+    if (!isPlatformBrowser(this.platformId) || this.loadedSignal()) {
       return;
     }
 
@@ -59,421 +70,209 @@ export class DeskBookingService {
       return this.loadPromise;
     }
 
-    this.loadPromise = this.loadDbInternal();
+    this.loadPromise = Promise.all([this.loadUsers(), this.loadBookings()]).then(() => undefined).finally(() => {
+      this.loadedSignal.set(true);
+      this.loadPromise = null;
+    });
     return this.loadPromise;
   }
 
-  getUsers(): DeskUser[] {
-    return this.dbSignal().users;
-  }
-
-  loginWithPasscode(userId: number, code: string): boolean {
-    const normalizedCode = code.trim().toLowerCase();
-    const selectedUser = this.dbSignal().users.find((user) => user.id === userId);
-
-    const hasMatchingPasscode = selectedUser?.passcode === normalizedCode;
-
-    if (!hasMatchingPasscode || !selectedUser) {
-      return false;
-    }
-
-    this.authService.setAuthCode(`book@${userId}`, selectedUser.name);
-    return true;
-  }
-
-  getBookingDateLabel(now: Date, bookingDay: BookingDay): string {
-    const bookableDate = this.getBookingDate(now, bookingDay);
-
-    return new Intl.DateTimeFormat('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    }).format(bookableDate);
-  }
-
   getDeskViews(now: Date, bookingDay: BookingDay): DeskView[] {
-    this.purgeExpiredBookings(now);
+    const targetDate = this.toDateKey(this.getBookingDate(now, bookingDay));
+    const currentUserId = this.authService.authUserId();
 
-    const targetDateKey = this.toDateKey(this.getBookingDate(now, bookingDay));
-    const currentCode = this.authService.authCode();
-
-    return this.dbSignal().desks.map((desk) => {
-      const storedBooking = this.bookingsSignal().find(
-        (entry) => entry.deskId === desk.id && entry.reservedFor === targetDateKey
+    return DESKS.map((desk) => {
+      const booking = this.bookingsSignal().find(
+        (item) => item.deskId === desk.id && item.reservedFor === targetDate
       ) ?? null;
-      const booking = storedBooking
-        ? {
-            ...storedBooking,
-            bookedByName: storedBooking.bookedByName ?? this.getUserNameFromCode(storedBooking.bookedBy)
-          }
-        : null;
-
-      const canCancel =
-        booking !== null &&
-        currentCode !== null &&
-        booking.bookedBy === currentCode &&
-        this.canCancelBooking(booking, now);
-
-      const canBook =
-        booking === null &&
-        currentCode !== null;
 
       return {
         ...desk,
-        status: booking === null ? 'available' : 'booked',
+        status: booking ? 'booked' : 'available',
         booking,
-        canBook,
-        canCancel
+        canBook: booking === null && currentUserId !== null,
+        canCancel: booking?.userId === currentUserId && this.canCancelBooking(booking, now)
       };
     });
   }
 
-  async bookDesk(deskId: string, now: Date, bookingDay: BookingDay): Promise<{ ok: boolean; message: string }> {
-  this.purgeExpiredBookings(now);
-
-  if (bookingDay === 'today' && now.getHours() >= 20) {
-    return { ok: false, message: 'Today bookings are closed after 8:00 PM.' };
+  getBookingDateLabel(now: Date, bookingDay: BookingDay): string {
+    return new Intl.DateTimeFormat('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    }).format(this.getBookingDate(now, bookingDay));
   }
 
-  const currentCode = this.authService.authCode();
-
-  if (!currentCode) {
-    return { ok: false, message: 'Please login to book a desk.' };
+  async register(request: { name: string; email: string; password: string }): Promise<AuthResponse> {
+    return this.request<AuthResponse>('/Auth/register', 'POST', request);
   }
 
-  const targetDesk = this.dbSignal().desks.find((desk) => desk.id === deskId);
-  if (!targetDesk) {
-    return { ok: false, message: 'Desk not found.' };
-  }
-
-  const targetDateKey = this.toDateKey(this.getBookingDate(now, bookingDay));
-  const existingBookings = this.bookingsSignal();
-
-  if (existingBookings.some((entry) => entry.deskId === deskId && entry.reservedFor === targetDateKey)) {
-    return { ok: false, message: 'This desk is already booked.' };
-  }
-
-  if (existingBookings.some((entry) => entry.bookedBy === currentCode && entry.reservedFor === targetDateKey)) {
-    return { ok: false, message: 'You already have a booking for this day.' };
-  }
-
-  const booking: DeskBooking = {
-    deskId,
-    reservedFor: targetDateKey,
-    bookedBy: currentCode,
-    bookedByName: this.authService.userName() ?? undefined,
-    bookedAt: now.toISOString()
-  };
-
-  const bookingEvent: DeskBookingEvent = {
-    ...booking,
-    action: 'saved',
-    actionAt: now.toISOString()
-  };
-  const nextEvents = [...this.bookingEventsSignal(), bookingEvent];
-  const saved = await this.setBookings([...existingBookings, booking], existingBookings, nextEvents);
-  if (!saved) {
-    return { ok: false, message: 'Booking could not be saved. Please try again.' };
-  }
-
-  return { ok: true, message: 'Seat booked successfully.' };
-  }
-
-  async cancelDesk(deskId: string, reservedFor: string, now: Date): Promise<{ ok: boolean; message: string }> {
-  this.purgeExpiredBookings(now);
-
-  const currentCode = this.authService.authCode();
-
-  if (!currentCode) {
-    return { ok: false, message: 'Please login to cancel booking.' };
-  }
-
-  const targetDesk = this.dbSignal().desks.find((desk) => desk.id === deskId);
-  if (!targetDesk) {
-    return { ok: false, message: 'Desk not found.' };
-  }
-
-  const booking = this.bookingsSignal().find(
-    (entry) => entry.deskId === deskId && entry.reservedFor === reservedFor
-  );
-
-  if (!booking) {
-    return { ok: false, message: 'Booking not found.' };
-  }
-
-  if (booking.bookedBy !== currentCode) {
-    return { ok: false, message: 'You can cancel only your own booking.' };
-  }
-
-  if (!this.canCancelBooking(booking, now)) {
-    return { ok: false, message: 'Cancel is allowed only till next day 10:00 AM.' };
-  }
-
-  const remaining = this.bookingsSignal().filter(
-    (entry) => !(entry.deskId === deskId && entry.reservedFor === reservedFor)
-  );
-
-  const bookingEvent: DeskBookingEvent = {
-    ...booking,
-    action: 'canceled',
-    actionAt: now.toISOString()
-  };
-  const nextEvents = [...this.bookingEventsSignal(), bookingEvent];
-  const saved = await this.setBookings(remaining, this.bookingsSignal(), nextEvents);
-  if (!saved) {
-    return { ok: false, message: 'Cancel could not be saved. Please try again.' };
-  }
-
-  return { ok: true, message: 'Booking canceled successfully.' };
-}
-
-  private async loadDbInternal(): Promise<void> {
-    if (!isPlatformBrowser(this.platformId)) {
-      this.loadedSignal.set(true);
-      this.loadPromise = null;
-      return;
+  async loadUsers(): Promise<void> {
+    try {
+      const users = await this.request<LoginUser[]>('/Auth/users', 'GET');
+      this.usersSignal.set(users);
+    } catch (error: unknown) {
+      this.usersSignal.set([]);
+      this.loadErrorSignal.set(this.getErrorMessage(error, 'Unable to load users.'));
     }
+  }
+
+  async login(credentials: Credentials): Promise<AuthResponse> {
+    const response = await this.request<AuthResponse>('/Auth/login', 'POST', credentials);
+    this.authService.setAuthSession(response.token, response.userId, response.name);
+    await this.loadBookings();
+    return response;
+  }
+
+  async bookDesk(
+    deskId: string,
+    now: Date,
+    bookingDay: BookingDay
+  ): Promise<{ ok: boolean; message: string }> {
+    const bookingDate = this.toDateKey(this.getBookingDate(now, bookingDay));
 
     try {
-      const db = await firstValueFrom(this.http.get<DeskDb>(this.apiUrl('/db.json')));
-      this.dbSignal.set(db);
-    } catch {
-      this.dbSignal.set({
-        users: dbJson.users,
-        desks: dbJson.desks
-      });
-    }
-
-    try {
-      await firstValueFrom(this.http.post(this.bookingCleanupApiPath, {}));
-    } catch {
-      // Non-blocking: continue with latest available booking data.
-    }
-
-    try {
-      const response = await firstValueFrom(this.http.get<{
-        bookings: DeskBooking[];
-        bookingEvents?: DeskBookingEvent[];
-      }>(this.bookingApiPath));
-      this.bookingsSignal.set(this.sanitizeBookings(response.bookings));
-      this.bookingEventsSignal.set(this.sanitizeBookingEvents(response.bookingEvents));
-    } catch {
-      this.bookingsSignal.set(this.readLocalBookings());
-      this.bookingEventsSignal.set(this.readLocalBookingEvents());
-    } finally {
-      this.loadedSignal.set(true);
-      this.loadPromise = null;
+      await this.request<BookingResponse>('/Bookings/book', 'POST', {
+        workStationCode: deskId,
+        bookingDate
+      }, true);
+      await this.refreshDate(bookingDate);
+      return { ok: true, message: 'Seat booked successfully.' };
+    } catch (error: unknown) {
+      return { ok: false, message: this.getErrorMessage(error, 'Booking could not be saved.') };
     }
   }
 
-  private canCancelBooking(booking: DeskBooking, now: Date): boolean {
-    const reservedDate = this.parseDateKey(booking.reservedFor);
-    if (!reservedDate) {
-      return false;
+  async cancelDesk(
+    deskId: string,
+    reservedFor: string,
+    _now: Date
+  ): Promise<{ ok: boolean; message: string }> {
+    try {
+      await this.requestText('/Bookings/cancel', 'POST', {
+        workStationCode: deskId,
+        bookingDate: reservedFor
+      }, true);
+      await this.refreshDate(reservedFor);
+      return { ok: true, message: 'Booking canceled successfully.' };
+    } catch (error: unknown) {
+      return { ok: false, message: this.getErrorMessage(error, 'Booking could not be canceled.') };
+    }
+  }
+
+  private async loadBookings(): Promise<void> {
+    try {
+      const today = this.toDateKey(new Date());
+      const tomorrow = this.toDateKey(this.getBookingDate(new Date(), 'tomorrow'));
+      const [todayBookings, tomorrowBookings] = await Promise.all([
+        this.getBookingsByDate(today),
+        this.getBookingsByDate(tomorrow)
+      ]);
+      this.bookingsSignal.set([...todayBookings, ...tomorrowBookings]);
+      this.loadErrorSignal.set(null);
+    } catch (error: unknown) {
+      this.bookingsSignal.set([]);
+      this.loadErrorSignal.set(this.getErrorMessage(error, 'Booking server is unavailable.'));
+    }
+  }
+
+  private async refreshDate(date: string): Promise<void> {
+    const refreshedBookings = await this.getBookingsByDate(date);
+    this.bookingsSignal.update((bookings) => [
+      ...bookings.filter((booking) => booking.reservedFor !== date),
+      ...refreshedBookings
+    ]);
+  }
+
+  private async getBookingsByDate(date: string): Promise<DeskBooking[]> {
+    const response = await this.request<BookingResponse[]>(
+      `/Bookings/by-date?date=${encodeURIComponent(date)}`,
+      'GET'
+    );
+    return response.map((booking) => ({
+      bookingDetailId: booking.bookingDetailId,
+      userId: booking.userId,
+      deskId: booking.workStationCode,
+      reservedFor: booking.bookingDate,
+      bookedBy: `book@${booking.userId}`,
+      bookedByName: booking.userName
+    }));
+  }
+
+  private async request<T>(
+    path: string,
+    method: 'GET' | 'POST',
+    body?: unknown,
+    authenticated = false
+  ): Promise<T> {
+    let headers = new HttpHeaders({ 'Content-Type': 'application/json' });
+    const token = this.authService.token();
+    if (authenticated && token) {
+      headers = headers.set('Authorization', `Bearer ${token}`);
     }
 
-    const deadline = new Date(reservedDate);
-    deadline.setDate(deadline.getDate() + 1);
-    deadline.setHours(10, 0, 0, 0);
+    return firstValueFrom(this.http.request<T>(method, `${this.apiBaseUrl}${path}`, {
+      body,
+      headers
+    }));
+  }
 
-    return now <= deadline;
+  private async requestText(
+    path: string,
+    method: 'POST',
+    body: unknown,
+    authenticated = false
+  ): Promise<string> {
+    let headers = new HttpHeaders({ 'Content-Type': 'application/json' });
+    const token = this.authService.token();
+    if (authenticated && token) {
+      headers = headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    return firstValueFrom(this.http.request(method, `${this.apiBaseUrl}${path}`, {
+      body,
+      headers,
+      responseType: 'text'
+    }));
+  }
+
+  private getErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse && typeof error.error === 'string' && error.error.trim()) {
+      return error.error;
+    }
+
+    if (error instanceof HttpErrorResponse && error.error?.message) {
+      return error.error.message;
+    }
+
+    return fallback;
   }
 
   private getBookingDate(now: Date, bookingDay: BookingDay): Date {
-    const selectedDate = new Date(now);
-    selectedDate.setHours(0, 0, 0, 0);
-
+    const date = new Date(now);
+    date.setHours(0, 0, 0, 0);
     if (bookingDay === 'tomorrow') {
-      selectedDate.setDate(selectedDate.getDate() + 1);
+      date.setDate(date.getDate() + 1);
     }
-
-    return selectedDate;
-  }
-
-  private purgeExpiredBookings(now: Date): void {
-    const bookings = this.bookingsSignal();
-    const today = new Date(now);
-    today.setHours(0, 0, 0, 0);
-
-    const clearTodayAt = new Date(today);
-    clearTodayAt.setHours(20, 0, 0, 0);
-
-    const activeBookings = bookings.filter((booking) => {
-      const reservedDate = this.parseDateKey(booking.reservedFor);
-      if (!reservedDate) {
-        return false;
-      }
-
-      if (reservedDate < today) {
-        return false;
-      }
-
-      if (reservedDate.getTime() === today.getTime() && now >= clearTodayAt) {
-        return false;
-      }
-
-      return true;
-    });
-
-    if (activeBookings.length !== bookings.length) {
-      void this.setBookings(activeBookings, bookings, this.bookingEventsSignal());
-    }
+    return date;
   }
 
   private toDateKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0')
+    ].join('-');
   }
 
-  private parseDateKey(value: string): Date | null {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-    if (!match) {
-      return null;
-    }
-
-    const year = Number(match[1]);
-    const month = Number(match[2]) - 1;
-    const day = Number(match[3]);
-
-    return new Date(year, month, day);
-  }
-
-  private sanitizeBookings(value: unknown): DeskBooking[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value.filter((item): item is DeskBooking => {
-      if (typeof item !== 'object' || item === null) {
-        return false;
-      }
-
-      const candidate = item as Partial<DeskBooking>;
-      return (
-        typeof candidate.deskId === 'string' &&
-        typeof candidate.reservedFor === 'string' &&
-        typeof candidate.bookedBy === 'string' &&
-        (candidate.bookedByName === undefined || typeof candidate.bookedByName === 'string') &&
-        typeof candidate.bookedAt === 'string'
-      );
-    });
-  }
-
-  private getUserNameFromCode(code: string): string | undefined {
-    const match = /^book@(\d{1,2})$/i.exec(code.trim());
-    if (!match) {
-      return undefined;
-    }
-
-    return this.dbSignal().users.find((user) => user.id === Number(match[1]))?.name;
-  }
-
-  private async setBookings(
-    bookings: DeskBooking[],
-    rollbackState: DeskBooking[],
-    bookingEvents: DeskBookingEvent[] = this.bookingEventsSignal(),
-    rollbackEvents: DeskBookingEvent[] = this.bookingEventsSignal()
-  ): Promise<boolean> {
-    this.bookingsSignal.set(bookings);
-    this.bookingEventsSignal.set(bookingEvents);
-
-    if (!isPlatformBrowser(this.platformId)) {
-      return true;
-    }
-
-    try {
-      await firstValueFrom(this.http.put(this.bookingApiPath, { bookings, bookingEvents }));
-      this.writeLocalBookings(bookings);
-      this.writeLocalBookingEvents(bookingEvents);
-      return true;
-    } catch {
-      try {
-        this.writeLocalBookings(bookings);
-        this.writeLocalBookingEvents(bookingEvents);
-        return true;
-      } catch {
-        this.bookingsSignal.set(rollbackState);
-        this.bookingEventsSignal.set(rollbackEvents);
-        return false;
-      }
-    }
-  }
-
-  private readLocalBookings(): DeskBooking[] {
-    if (!isPlatformBrowser(this.platformId)) {
-      return [];
-    }
-
-    try {
-      const storedBookings = localStorage.getItem(this.localBookingsStorageKey);
-      return storedBookings ? this.sanitizeBookings(JSON.parse(storedBookings) as unknown) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private writeLocalBookings(bookings: DeskBooking[]): void {
-    if (!isPlatformBrowser(this.platformId)) {
-      return;
-    }
-
-    localStorage.setItem(this.localBookingsStorageKey, JSON.stringify(bookings));
-  }
-
-  private sanitizeBookingEvents(value: unknown): DeskBookingEvent[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value.filter((item): item is DeskBookingEvent => {
-      if (!this.isDeskBooking(item)) {
-        return false;
-      }
-
-      const candidate = item as Partial<DeskBookingEvent>;
-      return (
-        (candidate.action === 'saved' || candidate.action === 'canceled') &&
-        typeof candidate.actionAt === 'string'
-      );
-    });
-  }
-
-  private isDeskBooking(value: unknown): value is DeskBooking {
-    if (typeof value !== 'object' || value === null) {
+  private canCancelBooking(booking: DeskBooking | null, now: Date): boolean {
+    if (!booking) {
       return false;
     }
 
-    const candidate = value as Partial<DeskBooking>;
-    return (
-      typeof candidate.deskId === 'string' &&
-      typeof candidate.reservedFor === 'string' &&
-      typeof candidate.bookedBy === 'string' &&
-      (candidate.bookedByName === undefined || typeof candidate.bookedByName === 'string') &&
-      typeof candidate.bookedAt === 'string'
-    );
-  }
-
-  private readLocalBookingEvents(): DeskBookingEvent[] {
-    if (!isPlatformBrowser(this.platformId)) {
-      return [];
-    }
-
-    try {
-      const storedEvents = localStorage.getItem(this.localBookingEventsStorageKey);
-      return storedEvents ? this.sanitizeBookingEvents(JSON.parse(storedEvents) as unknown) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private writeLocalBookingEvents(events: DeskBookingEvent[]): void {
-    if (!isPlatformBrowser(this.platformId)) {
-      return;
-    }
-
-    localStorage.setItem(this.localBookingEventsStorageKey, JSON.stringify(events));
+    const deadline = new Date(`${booking.reservedFor}T10:00:00`);
+    deadline.setDate(deadline.getDate() + 1);
+    return now <= deadline;
   }
 }
