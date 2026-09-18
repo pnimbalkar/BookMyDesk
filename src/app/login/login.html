@@ -14,15 +14,20 @@
           }
         </select>
 
-        <label for="passcode">Passcode</label>
-        <input
-          id="passcode"
-          type="number"
-          formControlName="passcode"
-          inputmode="numeric"
-          autocomplete="one-time-code"
-          placeholder="Enter passcode"
-        />
+        @if (isOtherSelected()) {
+          <label for="otherName">Name</label>
+          <input id="otherName" type="text" formControlName="otherName" autocomplete="name" placeholder="Enter name" />
+        } @else {
+          <label for="passcode">Passcode</label>
+          <input
+            id="passcode"
+            type="number"
+            formControlName="passcode"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="Enter passcode"
+          />
+        }
 
         @if (showValidationError()) {
           <p class="error-text">Select a user and enter a numeric passcode.</p>

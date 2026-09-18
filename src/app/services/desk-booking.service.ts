@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http
 import { isPlatformBrowser } from '@angular/common';
 import { inject, Injectable, PLATFORM_ID, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { AuthService } from './auth.service';
 import { DeskBooking, DeskDefinition, DeskView } from '../models/desk.models';
 import { environment } from '../../environments/environment';
@@ -26,12 +27,14 @@ interface BookingResponse {
 interface Credentials {
   name: string;
   passcode: number;
+  bookingForName?: string | null;
 }
 
 export interface LoginUser {
   userId: number;
   name: string;
   email: string;
+  passCode?: number;
 }
 
 const DESKS: DeskDefinition[] = [
@@ -56,6 +59,7 @@ export class DeskBookingService {
   private readonly loadedSignal = signal(false);
   private readonly loadErrorSignal = signal<string | null>(null);
   private loadPromise: Promise<void> | null = null;
+  private bookingHubConnection: HubConnection | null = null;
 
   readonly dbLoaded = this.loadedSignal.asReadonly();
   readonly loadError = this.loadErrorSignal.asReadonly();
@@ -74,6 +78,7 @@ export class DeskBookingService {
       this.loadedSignal.set(true);
       this.loadPromise = null;
     });
+    this.startBookingUpdates();
     return this.loadPromise;
   }
 
@@ -85,9 +90,31 @@ export class DeskBookingService {
     await this.loadBookings();
   }
 
+  private startBookingUpdates(): void {
+    if (!isPlatformBrowser(this.platformId) || this.bookingHubConnection !== null) {
+      return;
+    }
+
+    this.bookingHubConnection = new HubConnectionBuilder()
+      .withUrl(`${this.apiBaseUrl.replace(/\/api$/, '')}/hubs/bookings`)
+      .withAutomaticReconnect()
+      .configureLogging(LogLevel.Warning)
+      .build();
+
+    this.bookingHubConnection.on('bookingsChanged', () => {
+      void this.refreshBookings();
+    });
+
+    void this.bookingHubConnection.start().catch(() => {
+      this.bookingHubConnection = null;
+    });
+  }
+
   getDeskViews(now: Date, bookingDay: BookingDay): DeskView[] {
     const targetDate = this.toDateKey(this.getBookingDate(now, bookingDay));
     const currentUserId = this.authService.authUserId();
+    const currentBookingForName = this.authService.bookingForName();
+    const isOtherUser = this.authService.userName() === 'Other';
 
     return DESKS.map((desk) => {
       const booking = this.bookingsSignal().find(
@@ -99,7 +126,12 @@ export class DeskBookingService {
         status: booking ? 'booked' : 'available',
         booking,
         canBook: booking === null && currentUserId !== null,
-        canCancel: booking?.userId === currentUserId && this.canCancelBooking(booking, now)
+        canCancel: booking !== null &&
+          (isOtherUser
+            ? booking.userId === currentUserId &&
+              booking.bookedByName?.trim().toLowerCase() === currentBookingForName?.trim().toLowerCase()
+            : booking.userId === currentUserId) &&
+          this.canCancelBooking(booking, now)
       };
     });
   }
@@ -126,9 +158,9 @@ export class DeskBookingService {
     }
   }
 
-  async login(credentials: Credentials): Promise<AuthResponse> {
+  async login(credentials: Credentials, bookingForName: string | null = null): Promise<AuthResponse> {
     const response = await this.request<AuthResponse>('/Auth/login', 'POST', credentials);
-    this.authService.setAuthSession(response.token, response.userId, response.name);
+    this.authService.setAuthSession(response.token, response.userId, response.name, bookingForName);
     await this.loadBookings();
     return response;
   }
@@ -136,14 +168,16 @@ export class DeskBookingService {
   async bookDesk(
     deskId: string,
     now: Date,
-    bookingDay: BookingDay
+    bookingDay: BookingDay,
+    bookedForName: string | null = null
   ): Promise<{ ok: boolean; message: string }> {
     const bookingDate = this.toDateKey(this.getBookingDate(now, bookingDay));
 
     try {
       await this.request<BookingResponse>('/Bookings/book', 'POST', {
         workStationCode: deskId,
-        bookingDate
+        bookingDate,
+        bookedForName
       }, true);
       await this.refreshDate(bookingDate);
       return { ok: true, message: 'Seat booked successfully.' };

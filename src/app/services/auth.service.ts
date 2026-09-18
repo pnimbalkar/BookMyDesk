@@ -5,6 +5,7 @@ interface StoredAuthSession {
   token: string;
   userId: number;
   userName: string;
+  bookingForName: string | null;
   expiresAt: number;
 }
 
@@ -20,6 +21,8 @@ export class AuthService {
 
   readonly authCode = this.authCodeSignal.asReadonly();
   readonly userName = this.userNameSignal.asReadonly();
+  private readonly bookingForNameSignal = signal<string | null>(null);
+  readonly bookingForName = this.bookingForNameSignal.asReadonly();
   readonly token = this.tokenSignal.asReadonly();
   readonly authUserId = computed(() => this.extractUserId(this.authCodeSignal()));
   readonly isLoggedIn = computed(() => this.authCodeSignal() !== null);
@@ -28,12 +31,13 @@ export class AuthService {
     this.restoreSession();
   }
 
-  setAuthSession(token: string, userId: number, userName: string): void {
+  setAuthSession(token: string, userId: number, userName: string, bookingForName: string | null = null): void {
     const expiresAt = Date.now() + AuthService.sessionDurationMs;
     this.tokenSignal.set(token);
     this.authCodeSignal.set(`book@${userId}`);
     this.userNameSignal.set(userName);
-    this.saveSession({ token, userId, userName, expiresAt });
+    this.bookingForNameSignal.set(bookingForName);
+    this.saveSession({ token, userId, userName, bookingForName, expiresAt });
     this.scheduleExpiry(expiresAt);
   }
 
@@ -42,6 +46,7 @@ export class AuthService {
     this.tokenSignal.set(null);
     this.authCodeSignal.set(null);
     this.userNameSignal.set(null);
+    this.bookingForNameSignal.set(null);
     if (isPlatformBrowser(this.platformId)) {
       sessionStorage.removeItem(AuthService.sessionStorageKey);
     }
@@ -66,6 +71,7 @@ export class AuthService {
     this.tokenSignal.set(session.token);
     this.authCodeSignal.set(`book@${session.userId}`);
     this.userNameSignal.set(session.userName);
+    this.bookingForNameSignal.set(session.bookingForName);
     this.scheduleExpiry(session.expiresAt);
   }
 
@@ -84,11 +90,17 @@ export class AuthService {
         typeof (session as Record<string, unknown>)['token'] !== 'string' ||
         typeof (session as Record<string, unknown>)['userId'] !== 'number' ||
         typeof (session as Record<string, unknown>)['userName'] !== 'string' ||
+        (typeof (session as Record<string, unknown>)['bookingForName'] !== 'string' &&
+          (session as Record<string, unknown>)['bookingForName'] !== null &&
+          typeof (session as Record<string, unknown>)['bookingForName'] !== 'undefined') ||
         typeof (session as Record<string, unknown>)['expiresAt'] !== 'number'
       ) {
         return null;
       }
-      return session as StoredAuthSession;
+      return {
+        ...(session as StoredAuthSession),
+        bookingForName: ((session as Record<string, unknown>)['bookingForName'] as string | null | undefined) ?? null
+      };
     } catch {
       return null;
     }

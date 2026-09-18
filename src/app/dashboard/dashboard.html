@@ -10,11 +10,12 @@
 							name="bookingDay"
 							value="today"
 							[checked]="bookingDay() === 'today'"
-							[disabled]="now().getHours() >= 20"
+							[disabled]="now().getHours() >= 20 || isOtherUser()"
 							(change)="selectBookingDay('today')"
 						/>
 						<strong>Today ({{ todayLabel() }})</strong>
 					</label>
+					@if (!isOtherUser()) {
 					<label>
 						<input
 							type="radio"
@@ -25,11 +26,19 @@
 						/>
 						<strong>Tomorrow ({{ tomorrowLabel() }})</strong>
 					</label>
+					}
 				</fieldset>
 			</div>
 
 			<div class="auth-box">
-				<p class="mode-chip editable">Logged in: {{ userName() }} ({{ authCode() }})</p>
+				<p class="mode-chip editable">
+					Logged in: {{ displayUserName() }}
+					@if (!isOtherUser()) {
+						(Team)
+					} @else {						
+						(Other User)
+					}
+				</p>
 				<button type="button" (click)="logout()">Logout</button>
 			</div>
 

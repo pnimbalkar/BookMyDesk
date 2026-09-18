@@ -22,7 +22,6 @@ import { DeskView } from '../models/desk.models';
 })
 export class Dashboard {
   private readonly actionMessageDurationMs = 5000;
-  private readonly bookingRefreshIntervalMs = 5000;
   readonly bookingService = inject(DeskBookingService);
   private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
@@ -31,10 +30,11 @@ export class Dashboard {
   private readonly platformId = inject(PLATFORM_ID);
   private actionMessageTimerId: number | null = null;
   private actionMessageVersion = 0;
-  private bookingRefreshTimerId: number | null = null;
 
   readonly now = signal(new Date());
-  readonly bookingDay = signal<BookingDay>(new Date().getHours() >= 20 ? 'tomorrow' : 'today');
+  readonly bookingDay = signal<BookingDay>(
+    this.authService.userName() === 'Other' || new Date().getHours() < 20 ? 'today' : 'tomorrow'
+  );
   readonly isLoading = signal(true);
   readonly actionMessage = signal('');
 
@@ -42,6 +42,11 @@ export class Dashboard {
   readonly isLoggedIn = this.authService.isLoggedIn;
   readonly authCode = this.authService.authCode;
   readonly userName = this.authService.userName;
+  readonly bookingForName = this.authService.bookingForName;
+  readonly isOtherUser = computed(() => this.userName() === 'Other');
+  readonly displayUserName = computed(() =>
+    this.isOtherUser() ? this.bookingForName() ?? 'Other' : this.userName() ?? 'Team'
+  );
   private readonly paramMap = toSignal(this.route.paramMap, {
     initialValue: this.route.snapshot.paramMap
   });
@@ -100,7 +105,6 @@ export class Dashboard {
   constructor() {
     this.destroyRef.onDestroy(() => {
       this.clearActionMessageTimer();
-      this.clearBookingRefreshTimer();
     });
 
     this.startClock();
@@ -116,7 +120,12 @@ export class Dashboard {
     }
 
     if (desk.status === 'available') {
-      const result = await this.bookingService.bookDesk(desk.id, this.now(), this.bookingDay());
+      const result = await this.bookingService.bookDesk(
+        desk.id,
+        this.now(),
+        this.bookingDay(),
+        this.bookingForName()
+      );
       this.showActionMessage(result.message);
       return;
     }
@@ -190,6 +199,10 @@ export class Dashboard {
   }
 
   selectBookingDay(day: string): void {
+    if (this.isOtherUser()) {
+      this.bookingDay.set('today');
+      return;
+    }
     if (day === 'today' || day === 'tomorrow') {
       if (day === 'today' && this.now().getHours() >= 20) {
         this.bookingDay.set('tomorrow');
@@ -204,24 +217,6 @@ export class Dashboard {
     await this.bookingService.ensureDbLoaded();
     this.now.set(new Date());
     this.isLoading.set(false);
-    this.startBookingRefresh();
-  }
-
-  private startBookingRefresh(): void {
-    if (!isPlatformBrowser(this.platformId) || this.bookingRefreshTimerId !== null) {
-      return;
-    }
-
-    this.bookingRefreshTimerId = window.setInterval(() => {
-      void this.bookingService.refreshBookings();
-    }, this.bookingRefreshIntervalMs);
-  }
-
-  private clearBookingRefreshTimer(): void {
-    if (this.bookingRefreshTimerId !== null && isPlatformBrowser(this.platformId)) {
-      window.clearInterval(this.bookingRefreshTimerId);
-      this.bookingRefreshTimerId = null;
-    }
   }
 
   private startClock(): void {
