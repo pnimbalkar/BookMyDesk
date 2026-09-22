@@ -103,7 +103,7 @@ export class Login {
   }
 
   private async initialize(): Promise<void> {
-    await this.bookingService.ensureDbLoaded();
+    await this.bookingService.ensureUsersLoaded();
     this.isLoading.set(false);
   }
 

@@ -34,7 +34,6 @@ export interface LoginUser {
   userId: number;
   name: string;
   email: string;
-  passCode?: number;
 }
 
 const DESKS: DeskDefinition[] = [
@@ -56,12 +55,15 @@ export class DeskBookingService {
   private readonly apiBaseUrl = environment.apiUrl;
   private readonly bookingsSignal = signal<DeskBooking[]>([]);
   private readonly usersSignal = signal<LoginUser[]>([]);
+  private readonly usersLoadedSignal = signal(false);
   private readonly loadedSignal = signal(false);
   private readonly loadErrorSignal = signal<string | null>(null);
   private loadPromise: Promise<void> | null = null;
+  private usersLoadPromise: Promise<void> | null = null;
   private bookingHubConnection: HubConnection | null = null;
 
   readonly dbLoaded = this.loadedSignal.asReadonly();
+  readonly usersLoaded = this.usersLoadedSignal.asReadonly();
   readonly loadError = this.loadErrorSignal.asReadonly();
   readonly users = this.usersSignal.asReadonly();
 
@@ -74,7 +76,7 @@ export class DeskBookingService {
       return this.loadPromise;
     }
 
-    this.loadPromise = Promise.all([this.loadUsers(), this.loadBookings()]).then(() => undefined).finally(() => {
+    this.loadPromise = this.loadBookings().finally(() => {
       this.loadedSignal.set(true);
       this.loadPromise = null;
     });
@@ -88,6 +90,23 @@ export class DeskBookingService {
     }
 
     await this.loadBookings();
+  }
+
+  async ensureUsersLoaded(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId) || this.usersLoadedSignal()) {
+      return;
+    }
+
+    if (this.usersLoadPromise) {
+      return this.usersLoadPromise;
+    }
+
+    this.usersLoadPromise = this.loadUsers().finally(() => {
+      this.usersLoadedSignal.set(true);
+      this.usersLoadPromise = null;
+    });
+
+    return this.usersLoadPromise;
   }
 
   private startBookingUpdates(): void {

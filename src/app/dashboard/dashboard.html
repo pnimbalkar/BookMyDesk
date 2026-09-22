@@ -70,7 +70,7 @@
   }
 
 	@if (actionMessage() && isLoggedIn()) {
-		<p class="action-message">{{ actionMessage() }}</p>
+		<p class="action-message" role="status" aria-live="polite">{{ actionMessage() }}</p>
 	}
 
 	@if (!isReadOnly() && isLoading()) {

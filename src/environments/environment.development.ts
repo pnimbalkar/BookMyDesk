@@ -1,6 +1,6 @@
 export const environment = {
   production: false,
-  apiUrl: 'ttps://bookmydesk.bsite.net/api'
+  apiUrl: 'https://localhost:7057/api'
 };
 
 //https://localhost:7057/api
